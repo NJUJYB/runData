@@ -130,6 +130,15 @@ private[spark] class Executor(
     threadPool.execute(tr)
   }
 
+  // runData
+  def launchTask(context: ExecutorBackend, taskId: Long, attemptNumber: Int,
+    taskName: String, serializedTask: ByteBuffer, needChange: Boolean) {
+    val tr = new TaskRunner(context, taskId = taskId, attemptNumber = attemptNumber, taskName,
+      serializedTask, needChange)
+    runningTasks.put(taskId, tr)
+    threadPool.execute(tr)
+  }
+
   def killTask(taskId: Long, interruptThread: Boolean) {
     val tr = runningTasks.get(taskId)
     if (tr != null) {
@@ -157,10 +166,17 @@ private[spark] class Executor(
       serializedTask: ByteBuffer)
     extends Runnable {
 
+    def this(execBackend: ExecutorBackend, taskId: Long,
+      attemptNumber: Int, taskName: String, serializedTask: ByteBuffer, needChange: Boolean) = {
+      this(execBackend, taskId, attemptNumber, taskName, serializedTask)
+      needChangeLocation = needChange
+    }
+
     @volatile private var killed = false
     @volatile var task: Task[Any] = _
     @volatile var attemptedTask: Option[Task[Any]] = None
     @volatile var startGCTime: Long = _
+    var needChangeLocation: Boolean = false
 
     def kill(interruptThread: Boolean) {
       logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
@@ -183,6 +199,16 @@ private[spark] class Executor(
         val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
         updateDependencies(taskFiles, taskJars)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
+        // runData
+        val dirPath = "/home/jyb/Desktop/hadoop/hadoop-2.2.0/logs/locks/"
+        val dirFile: File = new File(dirPath)
+        if(!dirFile.exists() && !dirFile.isDirectory()) dirFile.mkdirs()
+        if(needChangeLocation){
+          logInfo("runData start create lock file %s, %s".format(task.stageId, task.partitionId))
+          val filePath = dirPath + taskId + "-" + task.stageId + "-" + task.partitionId
+          val fileFile: File = new File(filePath)
+          if(!fileFile.exists()) fileFile.createNewFile()
+        }
 
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
         // continue executing the task.

@@ -95,6 +95,13 @@ private[spark] class TaskSchedulerImpl(
 
   protected val executorIdToHost = new HashMap[String, String]
 
+  // runData
+  val IDLE = "idle"
+  var slotInExecutorOccupied = new HashMap[String, HashMap[Integer, String]]
+  var taskIdToHostExecutorSlot = new HashMap[String, String]
+  val preString = "runData "
+  var bandInHost = new HashMap[String, Integer] // KB
+
   // Listener object to pass upcalls into
   var dagScheduler: DAGScheduler = null
 
@@ -224,31 +231,108 @@ private[spark] class TaskSchedulerImpl(
       availableCpus: Array[Int],
       tasks: Seq[ArrayBuffer[TaskDescription]]) : Boolean = {
     var launchedTask = false
-    for (i <- 0 until shuffledOffers.size) {
-      val execId = shuffledOffers(i).executorId
-      val host = shuffledOffers(i).host
-      if (availableCpus(i) >= CPUS_PER_TASK) {
-        try {
-          for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
-            tasks(i) += task
-            val tid = task.taskId
-            taskIdToTaskSetId(tid) = taskSet.taskSet.id
-            taskIdToExecutorId(tid) = execId
-            executorsByHost(host) += execId
-            availableCpus(i) -= CPUS_PER_TASK
-            assert(availableCpus(i) >= 0)
-            launchedTask = true
+    // For runData
+    val schedulerMode = sc.getConf.get("spark.driver.runDataMode").toInt
+    if(taskSet.tasks(0).isInstanceOf[ShuffleMapTask]) logInfo(preString + "Task is ShuffleMapTask")
+    if(maxLocality.equals(TaskLocality.ANY)) logInfo(preString + "maxLocality is ANY")
+    schedulerMode match {
+      case 0 =>
+        for (i <- 0 until shuffledOffers.size) {
+          val execId = shuffledOffers(i).executorId
+          val host = shuffledOffers(i).host
+          if (availableCpus(i) >= CPUS_PER_TASK) {
+            try {
+              for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
+                tasks(i) += task
+                val tid = task.taskId
+                taskIdToTaskSetId(tid) = taskSet.taskSet.id
+                taskIdToExecutorId(tid) = execId
+                executorsByHost(host) += execId
+                availableCpus(i) -= CPUS_PER_TASK
+                assert(availableCpus(i) >= 0)
+                launchedTask = true
+              }
+            } catch {
+              case e: TaskNotSerializableException =>
+                logError(s"Resource offer failed, task set ${taskSet.name} was not serializable")
+                // Do not offer resources for this task, but don't throw an error to allow other
+                // task sets to be submitted.
+                return launchedTask
+            }
           }
-        } catch {
-          case e: TaskNotSerializableException =>
-            logError(s"Resource offer failed, task set ${taskSet.name} was not serializable")
-            // Do not offer resources for this task, but don't throw an error to allow other
-            // task sets to be submitted.
-            return launchedTask
         }
-      }
+      case _ =>
+        logInfo(preString + "Start runData Scheduler.")
+        for (i <- 0 until shuffledOffers.size) {
+          val execId = shuffledOffers(i).executorId
+          val host = shuffledOffers(i).host
+          if (availableCpus(i) >= CPUS_PER_TASK) {
+            try {
+              val slotIndex = findSlotIndex(schedulerMode, host, execId)
+              for (task <- taskSet.resourceOfferRunData(execId, host, maxLocality, slotIndex)) {
+                logInfo(preString + "Start prepare for %s, %s".format(host, slotIndex))
+                tasks(i) += task
+                val tid = task.taskId
+                slotInExecutorOccupied(host + execId)(slotIndex) = "" + tid
+                val key = "" + taskSet.taskSetIndex + "#" + tid
+                taskIdToHostExecutorSlot(key) = host + "#" + execId + "#" + slotIndex
+                taskIdToTaskSetId(tid) = taskSet.taskSet.id
+                taskIdToExecutorId(tid) = execId
+                executorsByHost(host) += execId
+                availableCpus(i) -= CPUS_PER_TASK
+                task.needChangeLocation = checkPreferLocations(host, task)
+                updateQueueInSlot(taskSet, task, slotIndex, host)
+                assert(availableCpus(i) >= 0)
+                launchedTask = true
+              }
+            } catch {
+              case e: TaskNotSerializableException =>
+                logError(s"Resource offer failed, ${taskSet.name} was not serializable")
+                return launchedTask
+            }
+          }
+        }
     }
     return launchedTask
+  }
+
+  // runData
+  def checkPreferLocations(host: String, task: TaskDescription): Boolean = {
+    var needChange: Boolean = true
+    for(tl <- task.preferLocations){
+      logInfo(preString + "Check PreferLocations: %s, %s".format(tl.host, host))
+      if(tl.host.equals(host)) needChange = false
+    }
+    logInfo(preString + "NeedChange?: %s".format("" + needChange))
+    task.preferLocations = null
+    return needChange
+  }
+
+  def updateQueueInSlot(taskSet: TaskSetManager, task: TaskDescription,
+    slotIndex: Int, host: String) = {
+  }
+
+  def findSlotIndex(schedulerMode: Int, host: String, execId: String): Integer = {
+    var slotIndex = -1
+    schedulerMode match {
+      case 1 =>
+      case 2 =>
+        if(host.equals("master")) slotIndex = findFreeSlot(host, execId)
+        if(bandInHost.contains(host)){
+          logInfo(preString + "Band-Slot: %s, %s".format(host, bandInHost(host)))
+        }
+    }
+    logInfo(preString + "configured: %s, %s".format(schedulerMode, slotIndex))
+    return slotIndex
+  }
+
+  // runData
+  def findFreeSlot(host: String, execId: String): Integer = {
+    var slotIndex = 0
+    logInfo(preString + "Test Occupied Show: %s, %s, %s".format(
+      slotInExecutorOccupied(host + execId)(slotIndex), host, execId))
+    if(!slotInExecutorOccupied(host + execId)(slotIndex).equals(IDLE)) slotIndex = -1
+    return slotIndex
   }
 
   /**
@@ -270,6 +354,12 @@ private[spark] class TaskSchedulerImpl(
       }
       for (rack <- getRackForHost(o.host)) {
         hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += o.host
+      }
+      // runData
+      if(!slotInExecutorOccupied.contains(o.host + o.executorId)){
+        val hashMapBuffer = new HashMap[Integer, String]()
+        for(i <- 0 until (o.cores/CPUS_PER_TASK + 1)) hashMapBuffer(i) = IDLE
+        slotInExecutorOccupied(o.host + o.executorId) = hashMapBuffer
       }
     }
 
@@ -294,7 +384,7 @@ private[spark] class TaskSchedulerImpl(
     for (taskSet <- sortedTaskSets; maxLocality <- taskSet.myLocalityLevels) {
       do {
         launchedTask = resourceOfferSingleTaskSet(
-            taskSet, maxLocality, shuffledOffers, availableCpus, tasks)
+          taskSet, maxLocality, shuffledOffers, availableCpus, tasks)
       } while (launchedTask)
     }
 
@@ -376,6 +466,18 @@ private[spark] class TaskSchedulerImpl(
     taskSetManager: TaskSetManager,
     tid: Long,
     taskResult: DirectTaskResult[_]) = synchronized {
+    val schedulerMode = sc.getConf.get("spark.driver.runDataMode").toInt
+    schedulerMode match {
+      case 0 =>
+      case _ =>
+        val key = "" + taskSetManager.taskSetIndex + "#" + tid
+        if(taskIdToHostExecutorSlot.contains(key)){
+          val sArray = taskIdToHostExecutorSlot(key).split("#")
+          logInfo(preString + "Successful: %s, %s, %s, %s, %s".format(taskSetManager.taskSetIndex,
+            tid, sArray(0), sArray(1), sArray(2)))
+          slotInExecutorOccupied(sArray(0) + sArray(1))(Integer.parseInt(sArray(2))) = IDLE
+        }
+    }
     taskSetManager.handleSuccessfulTask(tid, taskResult)
   }
 
@@ -477,6 +579,10 @@ private[spark] class TaskSchedulerImpl(
     }
     executorIdToHost -= executorId
     rootPool.executorLost(executorId, host)
+    // runData
+    slotInExecutorOccupied -= host + executorId
+    logInfo(preString + "Delete Band: %s, %s.".format(host, executorId))
+    if(bandInHost.contains(host)) bandInHost.remove(host)
   }
 
   def executorAdded(execId: String, host: String) {

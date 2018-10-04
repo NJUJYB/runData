@@ -17,14 +17,12 @@
 
 package org.apache.spark.examples;
 
+import org.apache.spark.api.java.function.*;
 import scala.Tuple2;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.FlatMapFunction;
-import org.apache.spark.api.java.function.Function2;
-import org.apache.spark.api.java.function.PairFunction;
 
 import java.util.Arrays;
 import java.util.List;
@@ -42,7 +40,57 @@ public final class JavaWordCount {
 
     SparkConf sparkConf = new SparkConf().setAppName("JavaWordCount");
     JavaSparkContext ctx = new JavaSparkContext(sparkConf);
+
+    // runData, TextInputFormat
     JavaRDD<String> lines = ctx.textFile(args[0], 1);
+    JavaRDD<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
+      @Override
+      public Iterable<String> call(String s) {
+        return Arrays.asList(SPACE.split(s));
+      }
+    });
+
+    words.foreach(new VoidFunction<String>() {
+      @Override
+      public void call(String s) throws Exception {
+        int bufferInt = 0; // For detail function
+      }
+    });
+
+    System.out.println("Job Ends.");
+
+    /*JavaPairRDD<String, Integer> ones = words.mapToPair(new PairFunction<String, String, Integer>() {
+      @Override
+      public Tuple2<String, Integer> call(String s) {
+        return new Tuple2<String, Integer>("", 1);
+      }
+    });
+
+    Function<Integer, Integer> createCombine = new Function<Integer, Integer>(){
+      @Override
+      public Integer call(Integer v1) throws Exception {
+        return v1;
+      }
+    };
+    Function2<Integer, Integer, Integer> mergeValue = new Function2<Integer, Integer, Integer>() {
+      @Override
+      public Integer call(Integer v1, Integer v2) throws Exception {
+        return v1 + v2;
+      }
+    };
+    Function2<Integer, Integer, Integer> mergeCombiners = new Function2<Integer, Integer, Integer>() {
+      @Override
+      public Integer call(Integer v1, Integer v2) throws Exception {
+        return v1 + v2;
+      }
+    };
+    JavaPairRDD<String, Integer> counts = ones.combineByKey(createCombine, mergeValue, mergeCombiners);
+    List<Tuple2<String, Integer>> output = counts.collect();
+    for (Tuple2<?,?> tuple : output) {
+      System.out.println("Counts: " + tuple._2());
+    }*/
+
+    /*JavaRDD<String> lines = ctx.textFile(args[0], 1);
 
     JavaRDD<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override
@@ -68,7 +116,7 @@ public final class JavaWordCount {
     List<Tuple2<String, Integer>> output = counts.collect();
     for (Tuple2<?,?> tuple : output) {
       System.out.println(tuple._1() + ": " + tuple._2());
-    }
+    }*/
     ctx.stop();
   }
 }

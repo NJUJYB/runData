@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import org.apache.spark.runhdfs.runTextInputFormat
+
 import scala.language.implicitConversions
 
 import java.io._
@@ -586,7 +588,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def textFile(path: String, minPartitions: Int = defaultMinPartitions): RDD[String] = {
     assertNotStopped()
-    hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
+    /* hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
+      minPartitions).map(pair => pair._2.toString).setName(path) */
+    // runData
+    hadoopFile(path, classOf[runTextInputFormat], classOf[LongWritable], classOf[Text],
       minPartitions).map(pair => pair._2.toString).setName(path)
   }
 
@@ -614,7 +619,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * }}}
    *
    * @note Small files are preferred, large file is also allowable, but may cause bad performance.
-   *
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
   def wholeTextFiles(path: String, minPartitions: Int = defaultMinPartitions):
@@ -659,7 +663,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * }}}
    *
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
-   *
    * @note Small files are preferred; very large files may cause bad performance.
    */
   @Experimental
@@ -1007,6 +1010,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, to which tasks can add values
    * with `+=`. Only the driver can access the accumuable's `value`.
+ *
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
@@ -1017,6 +1021,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Create an [[org.apache.spark.Accumulable]] shared variable, with a name for display in the
    * Spark UI. Tasks can add values to the accumuable using the `+=` operator. Only the driver can
    * access the accumuable's `value`.
+ *
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
@@ -1268,6 +1273,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Gets the locality information associated with the partition in a particular rdd
+ *
    * @param rdd of interest
    * @param partition to be looked up for locality
    * @return list of preferred locations for the partition

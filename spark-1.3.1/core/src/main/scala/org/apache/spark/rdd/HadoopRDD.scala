@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.io.EOFException
+import java.io.{File, EOFException}
 
 import scala.collection.immutable.Map
 import scala.reflect.ClassTag
@@ -214,6 +214,20 @@ class HadoopRDD[K, V](
       val split = theSplit.asInstanceOf[HadoopPartition]
       logInfo("Input split: " + split.inputSplit)
       val jobConf = getJobConf()
+      // runData
+      val lockPath = "/home/jyb/Desktop/hadoop/hadoop-2.2.0/logs/locks/"
+      val nameDefine = context.taskAttemptId() + "-" + context.stageId() + "-" + theSplit.index
+      val fileLock: File = new File(lockPath + nameDefine)
+      if(fileLock.exists()){
+        logInfo("runData check lock file: %s, %s, %s".format(
+          context.taskAttemptId(), context.stageId(), theSplit.index))
+        val buffer1: Array[String] = split.inputSplit.toString.split("/")
+        val buffer2: Array[String] = buffer1(buffer1.length - 1).split(":")
+        val fileWithNamePath = lockPath + buffer2(0)
+        val fileWithName: File = new File(fileWithNamePath)
+        fileWithName.createNewFile()
+        fileLock.delete()
+      }
 
       val inputMetrics = context.taskMetrics
         .getInputMetricsForReadMethod(DataReadMethod.Hadoop)

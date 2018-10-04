@@ -40,4 +40,8 @@ private[spark] class TaskDescription(
   def serializedTask: ByteBuffer = buffer.value
 
   override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
+
+  // runData
+  var needChangeLocation: Boolean = false
+  var preferLocations: Seq[TaskLocation] = null
 }

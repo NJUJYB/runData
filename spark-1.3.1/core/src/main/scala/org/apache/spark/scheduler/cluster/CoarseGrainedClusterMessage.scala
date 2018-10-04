@@ -48,6 +48,12 @@ private[spark] object CoarseGrainedClusterMessages {
     Utils.checkHostPort(hostPort, "Expected host port")
   }
 
+  // runData
+  case class UpdateBandInfo(executorId: String, hostPort: String, bandInfo: String)
+    extends CoarseGrainedClusterMessage {
+    Utils.checkHostPort(hostPort, "Expected host port")
+  }
+
   case class StatusUpdate(executorId: String, taskId: Long, state: TaskState,
     data: SerializableBuffer) extends CoarseGrainedClusterMessage
 

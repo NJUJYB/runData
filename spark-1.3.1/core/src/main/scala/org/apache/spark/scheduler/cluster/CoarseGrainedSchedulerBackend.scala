@@ -86,6 +86,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     }
 
     def receiveWithLogging = {
+      // runData
+      case UpdateBandInfo(executorId, hostPort, bandInfo) =>
+        val (host, _) = Utils.parseHostPort(hostPort)
+        logInfo(scheduler.preString + "Update Band: %s, %s, %s.".format(host, executorId, bandInfo))
+        scheduler.bandInHost(host) = Integer.parseInt(bandInfo)
       case RegisterExecutor(executorId, hostPort, cores, logUrls) =>
         Utils.checkHostPort(hostPort, "Host port expected " + hostPort)
         if (executorDataMap.contains(executorId)) {

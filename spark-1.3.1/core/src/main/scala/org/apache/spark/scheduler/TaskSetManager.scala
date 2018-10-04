@@ -54,6 +54,9 @@ private[spark] class TaskSetManager(
     clock: Clock = new SystemClock())
   extends Schedulable with Logging {
 
+  // runData
+  val taskSetIndex = TaskSetManager.taskSetNum = TaskSetManager.taskSetNum + 1
+
   val conf = sched.sc.conf
 
   /*
@@ -432,7 +435,10 @@ private[spark] class TaskSetManager(
 
       var allowedLocality = maxLocality
 
-      if (maxLocality != TaskLocality.NO_PREF) {
+      // runData
+      val schedulerMode = conf.get("spark.driver.runDataMode").toInt
+      // if (maxLocality != TaskLocality.NO_PREF)
+      if (maxLocality != TaskLocality.NO_PREF && schedulerMode == 0) {
         allowedLocality = getAllowedLocalityLevel(curTime)
         if (allowedLocality > maxLocality) {
           // We're not allowed to search for farther-away tasks
@@ -488,13 +494,26 @@ private[spark] class TaskSetManager(
               taskName, taskId, host, taskLocality, serializedTask.limit))
 
           sched.dagScheduler.taskStarted(task, info)
-          return Some(new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,
-            taskName, index, serializedTask))
+          /* return Some(new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,
+            taskName, index, serializedTask)) */
+          // runData
+          val taskDescription = new TaskDescription(taskId = taskId, attemptNumber = attemptNum,
+            execId, taskName, index, serializedTask)
+          taskDescription.preferLocations = task.preferredLocations
+          return Some(taskDescription)
         }
         case _ =>
       }
     }
     None
+  }
+
+  @throws[TaskNotSerializableException]
+  def resourceOfferRunData(execId: String, host: String,
+    maxLocality: TaskLocality.TaskLocality, slotIndex: Int)
+  : Option[TaskDescription] = {
+    if(slotIndex == -1) return None
+    else return resourceOffer(execId, host, TaskLocality.ANY)
   }
 
   private def maybeFinishTaskSet() {
@@ -901,4 +920,6 @@ private[spark] object TaskSetManager {
   // The user will be warned if any stages contain a task that has a serialized size greater than
   // this.
   val TASK_SIZE_TO_WARN_KB = 100
+  // runData
+  var taskSetNum: Integer = 0
 }

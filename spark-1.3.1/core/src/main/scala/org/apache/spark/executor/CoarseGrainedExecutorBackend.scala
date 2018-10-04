@@ -35,6 +35,8 @@ import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 
+import scala.io.Source
+
 private[spark] class CoarseGrainedExecutorBackend(
     driverUrl: String,
     executorId: String,
@@ -52,6 +54,12 @@ private[spark] class CoarseGrainedExecutorBackend(
   override def preStart() {
     logInfo("Connecting to driver: " + driverUrl)
     driver = context.actorSelection(driverUrl)
+    // runData
+    val filePath = "/home/jyb/Desktop/spark/runData/bandwidth.txt"
+    val lines = Source.fromFile(filePath, "UTF-8").getLines().toArray
+    val bandInfo = lines(0)
+    driver ! UpdateBandInfo(executorId, hostPort, bandInfo)
+
     driver ! RegisterExecutor(executorId, hostPort, cores, extractLogUrls)
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
   }
@@ -80,8 +88,12 @@ private[spark] class CoarseGrainedExecutorBackend(
         val ser = env.closureSerializer.newInstance()
         val taskDesc = ser.deserialize[TaskDescription](data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
+        /* executor.launchTask(this, taskId = taskDesc.taskId,
+        attemptNumber = taskDesc.attemptNumber,
+          taskDesc.name, taskDesc.serializedTask) */
+        // runData
         executor.launchTask(this, taskId = taskDesc.taskId, attemptNumber = taskDesc.attemptNumber,
-          taskDesc.name, taskDesc.serializedTask)
+          taskDesc.name, taskDesc.serializedTask, taskDesc.needChangeLocation)
       }
 
     case KillTask(taskId, _, interruptThread) =>
