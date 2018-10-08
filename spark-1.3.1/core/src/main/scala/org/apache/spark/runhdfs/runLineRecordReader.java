@@ -200,64 +200,39 @@ public class runLineRecordReader implements RecordReader<LongWritable, Text> {
 		in.close();
 
 		// runData
-		ArrayList<String> outsideEvents = new ArrayList<String>();
-		ArrayList<Long> outsideTimes = new ArrayList<Long>();
-		String targetDirPath = "/home/jyb/Desktop/hadoop/hadoop-2.2.0/logs/blockCache/";
-		String targetFilePath = targetDirPath + in.fileName;
-		outsideEvents.add(in.fileName);outsideTimes.add(System.nanoTime());
-		outsideEvents.add(targetFilePath);outsideTimes.add(System.nanoTime());
-		File tDir = new File(targetDirPath);
-		File tfile = new File(targetFilePath);
-		try{
-		  if(!tDir.exists() && !tDir.isDirectory()) tDir.mkdirs();
-		  if(!tfile.exists()){
-			outsideEvents.add("Create File");outsideTimes.add(System.nanoTime());
-			tfile.createNewFile();
-			FileOutputStream fos = new FileOutputStream(tfile, true);
-			fos.write(in.splitBuf);
-			fos.flush();
-			fos.close();
-			in.splitBuf = null;
-			outsideEvents.add("End File Write");outsideTimes.add(System.nanoTime());
-		  }else {
-			outsideEvents.add("File Exists");outsideTimes.add(System.nanoTime());
-		  }
-		} catch (IOException e){
-		  e.printStackTrace();
-		}
-		if(in.expLogs.size() > 0){
-		  runDataLogs.writeLogs("FillBuffer", in.expLogs, in.times);
-		}
 		if(in.fileOrigPath != null){
-		  String originFilePath = in.fileOrigPath.split("master:9000")[1];
-		  String newDir = originFilePath.split(in.fileName)[0];
-		  String hdfsSH = "/home/jyb/Desktop/hadoop/hadoop-2.2.0/bin/hdfs dfs";
-		  String cmd1 = hdfsSH + " -rm " + originFilePath;
-		  String cmd2= " && " + hdfsSH + " -put " + targetFilePath + " " + newDir;
-		  String cmd = cmd1 + cmd2;
-		  outsideEvents.add(cmd);outsideTimes.add(System.nanoTime());
+		  ArrayList<String> outsideEvents = new ArrayList<String>();
+		  ArrayList<Long> outsideTimes = new ArrayList<Long>();
+		  String targetFilePath = proActiveRunData.targetDirPath + in.fileName;
+		  outsideEvents.add(in.fileName);outsideTimes.add(System.nanoTime());
+		  outsideEvents.add(targetFilePath);outsideTimes.add(System.nanoTime());
+		  proActiveRunData.checkDirExist();
+		  File tfile = new File(targetFilePath);
 		  try{
-			String[] command = {"/bin/sh", "-c", cmd};
-			Process process = Runtime.getRuntime().exec(command);
-			BufferedReader stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-			BufferedReader stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-			outsideEvents.add("Before Start CMD");outsideTimes.add(System.nanoTime());
-			String line;
-			while((line = stdoutReader.readLine()) != null){
-			  outsideEvents.add("Out: " + line);outsideTimes.add(System.nanoTime());
+			if(!tfile.exists()){
+			  outsideEvents.add("Create File");outsideTimes.add(System.nanoTime());
+			  tfile.createNewFile();
+			  FileOutputStream fos = new FileOutputStream(tfile, true);
+			  fos.write(in.splitBuf);
+			  fos.flush();
+			  fos.close();
+			  in.splitBuf = null;
+			  outsideEvents.add("End File Write");outsideTimes.add(System.nanoTime());
+			}else {
+			  outsideEvents.add("File Exists");outsideTimes.add(System.nanoTime());
+			  tfile.delete();
 			}
-			while((line = stderrReader.readLine()) != null){
-			  outsideEvents.add("Error: " + line);outsideTimes.add(System.nanoTime());
-			}
-			int exitVal = process.waitFor();
-			outsideEvents.add("" + exitVal);outsideTimes.add(System.nanoTime());
-			outsideEvents.add("End CMD");outsideTimes.add(System.nanoTime());
-		  } catch (Exception e) {
-			outsideEvents.add("Exception: " + e.toString());outsideTimes.add(System.nanoTime());
+		  } catch (IOException e){
 			e.printStackTrace();
 		  }
+		  if(in.expLogs.size() > 0){
+			runDataLogs.writeLogs("FillBuffer", in.expLogs, in.times);
+		  }
+		  String localFilePath = targetFilePath;
+		  String hdfsFilePath = in.fileOrigPath.split("master:9000")[1];
+		  String fileName = in.fileName;
+		  validCachedFile.validFile(localFilePath, hdfsFilePath, fileName);
 		}
-		runDataLogs.writeLogs("End Copy", outsideEvents, outsideTimes);
 	  }
 	} finally {
 	  if (decompressor != null) {

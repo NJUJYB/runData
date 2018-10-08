@@ -22,6 +22,8 @@ import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 
+import org.apache.spark.runhdfs.runMessage.proActiveDataMessage.{RequestRunDataNonExist, RequestRunDataExist}
+
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -446,6 +448,41 @@ private[spark] class Master(
 
     case BoundPortsRequest => {
       sender ! BoundPortsResponse(port, webUi.boundPort, restServerBoundPort)
+    }
+
+    // runData
+    case RequestRunDataExist(hdfsFilePath, originHost, targetHost) => {
+      logInfo("runDataExist: %s, %s, %s".format(hdfsFilePath, originHost, targetHost))
+      var targetWorker: WorkerInfo = null
+      // checkWorkers(targetHost)
+      for(id <- idToWorker.keySet){
+        if(idToWorker(id).host.equals(targetHost)) targetWorker = idToWorker(id)
+      }
+      if(targetWorker != null){
+        logInfo("TargetWorker Not Null")
+        targetWorker.actor ! RequestRunDataExist(hdfsFilePath, originHost, targetHost)
+      }
+    }
+
+    case RequestRunDataNonExist(localFilePath, hdfsDir, originHost, targetHost) => {
+      logInfo("runDataNonExist: %s, %s, %s, %s".format(
+        localFilePath, hdfsDir, originHost, targetHost))
+      var targetWorker: WorkerInfo = null
+      // checkWorkers(targetHost)
+      for(id <- idToWorker.keySet){
+        if(idToWorker(id).host.equals(targetHost)) targetWorker = idToWorker(id)
+      }
+      if(targetWorker != null){
+        logInfo("TargetWorker Not Null")
+        targetWorker.actor ! RequestRunDataNonExist(localFilePath, hdfsDir, originHost, targetHost)
+      }
+    }
+  }
+
+  // runData
+  def checkWorkers(targetHost: String) = {
+    for(id <- idToWorker.keySet){
+      logInfo("runData Check Workers: %s".format(idToWorker(id).host))
     }
   }
 

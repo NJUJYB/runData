@@ -22,6 +22,9 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.{UUID, Date}
 
+import org.apache.spark.runhdfs.proActiveRunData
+import org.apache.spark.runhdfs.runMessage.proActiveDataMessage.{RequestRunDataNonExist, RequestRunDataExist}
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.duration._
@@ -485,6 +488,19 @@ private[spark] class Worker(
     case ApplicationFinished(id) =>
       finishedApps += id
       maybeCleanupApplication(id)
+
+    // runData
+    case RequestRunDataExist(hdfsFilePath, originHost, targetHost) => {
+      logInfo("runDataExist Worker: %s, %s, %s".format(
+        hdfsFilePath, originHost, targetHost))
+      proActiveRunData.proActiveDataExsits(hdfsFilePath)
+    }
+
+    case RequestRunDataNonExist(localFilePath, hdfsDir, originHost, targetHost) => {
+      logInfo("runDataNonExist Worker: %s, %s, %s, %s".format(
+        localFilePath, hdfsDir, originHost, targetHost))
+      proActiveRunData.proActiveDataDirectly(localFilePath, hdfsDir, originHost)
+    }
   }
 
   private def masterDisconnected() {
