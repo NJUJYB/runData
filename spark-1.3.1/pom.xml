@@ -125,7 +125,7 @@
     <hbase.version>0.98.7-hadoop1</hbase.version>
     <hbase.artifact>hbase</hbase.artifact>
     <flume.version>1.4.0</flume.version>
-    <zookeeper.version>3.4.5</zookeeper.version>
+    <zookeeper.version>3.4.14</zookeeper.version>
     <hive.group>org.spark-project.hive</hive.group>
     <!-- Version used in Maven Hive dependency -->
     <hive.version>0.13.1a</hive.version>
@@ -1648,7 +1648,7 @@
         <dependency>
           <groupId>org.apache.zookeeper</groupId>
           <artifactId>zookeeper</artifactId>
-          <version>3.4.5-mapr-1406</version>
+          <version>3.4.14</version>
         </dependency>
       </dependencies>
     </profile>
